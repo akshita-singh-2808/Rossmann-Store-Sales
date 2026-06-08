@@ -71,7 +71,7 @@ def load_predictions():
 @st.cache_resource
 def load_model_and_scalers():
     from tensorflow.keras.models import load_model
-    model = load_model(BASE_DIR / "best_model.keras")
+    model = load_model(BASE_DIR / "best_model.keras",compile=False)
     feature_scaler = joblib.load(BASE_DIR / "feature_scaler.pkl")
     target_scaler = joblib.load(BASE_DIR / "target_scaler.pkl")
     return model, feature_scaler, target_scaler
