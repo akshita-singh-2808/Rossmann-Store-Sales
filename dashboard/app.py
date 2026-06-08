@@ -39,8 +39,8 @@ st.set_page_config(
 # ----------------------------------------------------------------
 @st.cache_data
 def load_data():
-    train = pd.read_csv("dashboard/train.csv", low_memory=False)
-    store = pd.read_csv("dashboard/store.csv")
+    train = pd.read_csv("data\\rossmann-store-sales\\train.csv", low_memory=False)
+    store = pd.read_csv("data\\rossmann-store-sales\\store.csv")
 
     store["CompetitionDistance"]       = store["CompetitionDistance"].fillna(store["CompetitionDistance"].median())
     store["CompetitionOpenSinceMonth"] = store["CompetitionOpenSinceMonth"].fillna(0)
@@ -62,7 +62,7 @@ def load_data():
 
 @st.cache_data
 def load_predictions():
-    return pd.read_csv("dashboard/final_predictions.csv")
+    return pd.read_csv("outputs\\final_predictions.csv")
 
 # Load model once — @st.cache_resource keeps it in memory
 @st.cache_resource
