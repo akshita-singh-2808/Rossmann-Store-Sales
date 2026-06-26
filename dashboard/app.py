@@ -295,7 +295,7 @@ with tab3:
 
     with c4:
         st.markdown("[Naive Baseline](https://insightful-data-lab.com/2025/08/22/naive-baseline-forecast/)")
-        st.metric("", "3,221 RMSE", "-66.4% improvement")
+        st.metric('RMSE', "3,221 units", "-66.4% improvement")
 
     st.markdown("---")
     col1, col2 = st.columns(2)
