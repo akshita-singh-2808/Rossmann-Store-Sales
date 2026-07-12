@@ -1,5 +1,3 @@
-
-
 from pyparsing import col
 import streamlit as st
 import pandas as pd
@@ -539,31 +537,45 @@ with tab5:
             # Recompute lag/rolling on the hypothetical promo-boosted series
             # Use a rough +20% uplift on Sales to reflect expected promo effect on lag features
             boosted = store_seq["Sales"] * 1.20
-            store_seq["Lag_7"]          = boosted.shift(7).fillna(method="bfill")
-            store_seq["Lag_30"]         = boosted.shift(30).fillna(method="bfill")
+            store_seq["Lag_7"]          = boosted.shift(7).bfill().fillna(boosted.mean())
+            store_seq["Lag_30"]         = boosted.shift(30).bfill().fillna(boosted.mean())
             store_seq["Rolling_Mean_7"] = boosted.rolling(7, min_periods=1).mean()
             store_seq["Rolling_Std_7"]  = boosted.rolling(7, min_periods=1).std().fillna(0)
 
         # Model was trained on raw (unscaled) features — do NOT apply feature_scaler
         X_raw = store_seq[FEATURES].values
 
-        # Build sequences
-        X_seq = []
-        for i in range(len(X_raw) - WINDOW):
-            X_seq.append(X_raw[i : i + WINDOW])
-        X_seq = np.array(X_seq)
+        # Guard 1: not enough rows to build even one window -> would give an
+        # empty array with the wrong shape and crash model.predict()
+        if len(X_raw) <= WINDOW:
+            st.warning(
+                f"Store {store_id} only has {len(X_raw)} day(s) of data in this "
+                f"view, but the model needs more than {WINDOW} days of history "
+                f"to produce a forecast. Try increasing 'Days to display' or "
+                f"picking a different store."
+            )
+            forecast = pd.Series(np.full(len(store_seq), np.nan), index=store_seq.index)
+        else:
+            # Guard 2: the promo-boost recompute can leave NaNs (e.g. rolling std
+            # on a single value, or an all-NaN slice before bfill runs out of
+            # values to fill). NaNs silently propagate through predict/inverse
+            # transform and can crash or produce garbage — so clean them up.
+            X_raw = np.nan_to_num(X_raw, nan=0.0, posinf=0.0, neginf=0.0)
 
-        # Predict
-        preds_scaled = model.predict(X_seq, verbose=0)
-        preds_actual = target_scaler.inverse_transform(preds_scaled).flatten()
-        preds_actual = np.clip(preds_actual, 0, None)
+            # Build sequences
+            X_seq = np.array([X_raw[i:i + WINDOW] for i in range(len(X_raw) - WINDOW)])
 
-        # Pad first WINDOW rows with NaN (no prediction for them)
-        padding  = np.full(WINDOW, np.nan)
-        forecast = pd.Series(
-            np.concatenate([padding, preds_actual]),
-            index=store_seq.index
-        )
+            # Predict
+            preds_scaled = model.predict(X_seq, verbose=0)
+            preds_actual = target_scaler.inverse_transform(preds_scaled).flatten()
+            preds_actual = np.clip(preds_actual, 0, None)
+
+            # Pad first WINDOW rows with NaN (no prediction for them)
+            padding  = np.full(WINDOW, np.nan)
+            forecast = pd.Series(
+                np.concatenate([padding, preds_actual]),
+                index=store_seq.index
+            )
 
         # KPI cards
         c1, c2, c3, c4 = st.columns(4)
