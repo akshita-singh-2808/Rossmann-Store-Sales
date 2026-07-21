@@ -10,6 +10,10 @@ warnings.filterwarnings("ignore")
 from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# Shared lookup used by every day-of-week chart in this file (previously
+# redefined three separate times — consolidated here for consistency).
+DAY_NAMES = {1: "Mon", 2: "Tue", 3: "Wed", 4: "Thu", 5: "Fri", 6: "Sat", 7: "Sun"}
+
 plt.rcParams.update({
     "figure.facecolor": "#0E1117",
     "axes.facecolor": "#111827",
@@ -71,6 +75,15 @@ def load_predictions():
 def load_model_and_scalers():
     from tensorflow.keras.models import load_model
     model = load_model(BASE_DIR /'models'/ "best_model.keras",compile=False)
+    # NOTE: feature_scaler is loaded for completeness/traceability but is
+    # intentionally NOT applied below. In the training notebook the scaler
+    # was fit and transformed into X_train_scaled/X_test_scaled, but the
+    # sequence-building step actually read features straight from the
+    # unscaled dataframe — so the model was trained on raw feature values.
+    # Verified by reproducing the notebook's pipeline from raw data and
+    # matching best_model.keras's predictions to outputs/final_predictions.csv
+    # to the third decimal place. Only target_scaler is used, to invert the
+    # model's scaled Sales output back to real units.
     feature_scaler = joblib.load(BASE_DIR /'models'/ "feature_scaler.pkl")
     target_scaler = joblib.load(BASE_DIR /'models'/ "target_scaler.pkl")
     return model, feature_scaler, target_scaler
@@ -80,11 +93,6 @@ preds  = load_predictions()
 y_true = preds["Actual"].values
 y_pred = np.clip(preds["Predicted"].values, 0, None)
 
-# Lazy-load TensorFlow model only when Forecast Simulator is opened
-model = None
-feature_scaler = None
-target_scaler = None
-
 # ----------------------------------------------------------------
 # SIDEBAR
 # ----------------------------------------------------------------
@@ -93,7 +101,7 @@ with st.sidebar:
     st.title("📊 Rossmann Forecasting")
 
     st.markdown(
-        "Deep Learning Sales Forecasting using LSTM & XGBoost"
+        "Deep Learning Sales Forecasting using LSTM"
     )
 
     st.markdown("---")
@@ -110,9 +118,11 @@ with st.sidebar:
     st.subheader("Model")
 
     st.write(
-        "2-layer LSTM | XGBoost \n\n "
+        "2-layer LSTM (deployed)\n\n"
         "8 engineered features\n\n"
-        "TensorFlow / Keras"
+        "TensorFlow / Keras\n\n"
+        "XGBoost Tuned scored better offline but its saved model "
+        "file isn't reloadable — see Model Performance tab."
     )
 
     st.markdown("---")
@@ -159,7 +169,7 @@ with tab1:
     st.title("Rossmann Store Sales Forecasting")
     st.markdown(
         "**Business Problem:** Rossmann operates 1,115 drug stores across Germany. "
-        "This model forecasts daily sales per store to optimise "
+        "This LSTM model forecasts daily sales per store to optimise "
         "inventory planning, staffing, and promotions."
     )
     st.markdown("---")
@@ -196,7 +206,7 @@ with tab1:
     st.subheader("Project Pipeline")
     st.markdown("""
     `Raw Data` → `EDA` → `Feature Engineering` → `Sequence Creation (window=30)`
-    → `Model Training` → `Evaluation` → `Business Insights` → `Dashboard`
+    → `LSTM Training` → `Evaluation` → `Business Insights` → `Dashboard`
     """)
 
 
@@ -228,9 +238,8 @@ with tab2:
         st.subheader("Average Sales by Day of Week")
        
         dow      = df.groupby("DayOfWeek")["Sales"].mean()
-        day_names= {1:"Mon",2:"Tue",3:"Wed",4:"Thu",5:"Fri",6:"Sat",7:"Sun"}
         fig, ax  = plt.subplots(figsize=(10,5))
-        ax.bar([day_names[d] for d in dow.index], dow.values,
+        ax.bar([DAY_NAMES[d] for d in dow.index], dow.values,
                color="#7c3aed", edgecolor="white")
         ax.set_ylabel("Avg Sales (units)")
         ax.grid(True, alpha=0.3, axis="y")
@@ -396,6 +405,20 @@ with tab3:
             "XGBoost Tuned achieved the best overall forecasting accuracy "
             "with lowest MAE/RMSE and highest R² score."
         )
+        st.info(
+            "**Why the Forecast Simulator still runs on LSTM:** these XGBoost "
+            "figures are the original held-out evaluation recorded when the "
+            "models were trained. The saved `xgb_model.pkl` / "
+            "`xgb_tuned_model.pkl` files raise an XGBoost version-compatibility "
+            "warning on load, and re-running them against the verified feature "
+            "pipeline no longer reproduces these numbers — a known risk of "
+            "pickling `XGBRegressor` objects across library versions instead of "
+            "using XGBoost's native `save_model`/`load_model`. The LSTM has been "
+            "re-verified end-to-end against this exact pipeline and matches its "
+            "reported metrics precisely, so it remains the model deployed in "
+            "the simulator until XGBoost is re-trained and re-exported in a "
+            "reloadable format."
+        )
 # TAB 4 — BUSINESS INSIGHTS
 # ================================================================
 with tab4:
@@ -426,9 +449,8 @@ promo launch using 7-day forecast as signal.
         dow     = df.groupby("DayOfWeek")["Sales"].mean()
         overall = dow.mean()
         idx     = (dow / overall).round(2)
-        day_names = {1:"Mon",2:"Tue",3:"Wed",4:"Thu",5:"Fri",6:"Sat",7:"Sun"}
         idx_df = pd.DataFrame({
-            "Day":            [day_names[d] for d in idx.index],
+            "Day":            [DAY_NAMES[d] for d in idx.index],
             "Staffing Index": idx.values,
             "Action":         ["More staff" if v >= 1 else "Fewer staff"
                                for v in idx.values]
@@ -488,15 +510,17 @@ promo launch using 7-day forecast as signal.
 with tab5:
     st.title("Forecast Simulator")
 
-    with st.spinner("Loading model..."):
+    with st.spinner("Loading LSTM model..."):
         model, feature_scaler, target_scaler = load_model_and_scalers()
-    st.write(
-    "The forecasting model was trained using historical data from all Rossmann stores. "
-    "In the dashboard, the selected store's historical sales and engineered features "
-    "are used to generate store-level sales forecasts."
-    )
-    st.markdown("Select a store and explore its historical sales alongside the model forecasts.")
-    st.markdown("---")
+    st.write("The LSTM model was trained on data from all Rossmann stores together. In the dashboard, the selected store’s historical sales are passed into the trained model to generate store-level forecasts")
+    st.markdown("Select a store and see its sales history with LSTM forecast.")
+    # st.caption(
+    #     "ℹ️ This deployed simulator uses the **LSTM** model. XGBoost Tuned "
+    #     "scored better in the offline benchmark (see Model Performance tab), "
+    #     "but its saved model file can no longer be reliably reloaded in this "
+    #     "environment — see the note on the Model Performance tab for details."
+    # )
+    # st.markdown("---")
 
     # User inputs
     col1, col2, col3 = st.columns(3)
@@ -515,10 +539,17 @@ with tab5:
         )
     with col3:
         show_days = st.slider(
-            "Days to display",
+            "Days of history to display",
             min_value=61,   # Fix Bug 3: must be > WINDOW(30)+1 to produce at least one prediction
             max_value=120,
-            value=90
+            value=90,
+            help=(
+                "Controls how many past days are shown, not how far into the "
+                "future the model predicts. For each visible day the model "
+                "makes a one-step-ahead prediction from that day's real "
+                "30-day trailing window — it does not extrapolate beyond the "
+                "dataset's date range."
+            )
         )
 
     # Filter to selected store
@@ -605,7 +636,7 @@ with tab5:
         for d in promo_dates:
             ax.axvline(d, alpha=0.12, color="#03fc13", linewidth=1.5)
 
-        ax.set_title(f"Store {store_id} — Sales & Model Forecast",
+        ax.set_title(f"Store {store_id} — Sales & LSTM Forecast",
                      fontweight="bold", fontsize=13)
         ax.set_xlabel("Date")
         ax.set_ylabel("Sales (units)")
@@ -616,18 +647,29 @@ with tab5:
         st.pyplot(fig)
         plt.close()
 
-        st.caption("Green shading = promotion days. "
-                   "First 30 days have no forecast (need full window).")
+        st.caption(
+            "Green shading = promotion days. First 30 days have no forecast "
+            "(need a full 30-day window). Dates shown are historical — this "
+            "chart replays the model's one-step-ahead predictions over real "
+            "past data, it does not extrapolate beyond it."
+        )
+        if promo_on == "Yes":
+            st.caption(
+                "Simulation assumption: toggling promo ON sets Promo=1 and "
+                "assumes a +20% sales uplift when recomputing the lag/rolling "
+                "features fed to the model (consistent with the ~+20% promo "
+                "lift observed in the EDA). This is a scenario assumption, "
+                "not a separate promo-uplift model."
+            )
 
         # Day of week pattern for this store
         st.markdown("---")
         st.subheader(f"Store {store_id} — Sales by Day of Week")
 
         dow_store = store_data.groupby("DayOfWeek")["Sales"].mean()
-        day_names = {1:"Mon",2:"Tue",3:"Wed",4:"Thu",5:"Fri",6:"Sat",7:"Sun"}
 
         fig, ax = plt.subplots(figsize=(8, 3))
-        ax.bar([day_names.get(d, str(d)) for d in dow_store.index],
+        ax.bar([DAY_NAMES.get(d, str(d)) for d in dow_store.index],
                dow_store.values, color="#7c3aed", edgecolor="white")
         ax.set_ylabel("Avg Sales (units)")
         ax.grid(True, alpha=0.3, axis="y")
