@@ -93,7 +93,7 @@ with st.sidebar:
     st.title("📊 Rossmann Forecasting")
 
     st.markdown(
-        "Deep Learning Sales Forecasting using LSTM"
+        "Deep Learning Sales Forecasting using LSTM & XGBoost"
     )
 
     st.markdown("---")
@@ -110,7 +110,7 @@ with st.sidebar:
     st.subheader("Model")
 
     st.write(
-        "2-layer LSTM\n\n"
+        "2-layer LSTM | XGBoost \n\n "
         "8 engineered features\n\n"
         "TensorFlow / Keras"
     )
@@ -159,7 +159,7 @@ with tab1:
     st.title("Rossmann Store Sales Forecasting")
     st.markdown(
         "**Business Problem:** Rossmann operates 1,115 drug stores across Germany. "
-        "This LSTM model forecasts daily sales per store to optimise "
+        "This model forecasts daily sales per store to optimise "
         "inventory planning, staffing, and promotions."
     )
     st.markdown("---")
@@ -196,7 +196,7 @@ with tab1:
     st.subheader("Project Pipeline")
     st.markdown("""
     `Raw Data` → `EDA` → `Feature Engineering` → `Sequence Creation (window=30)`
-    → `LSTM Training` → `Evaluation` → `Business Insights` → `Dashboard`
+    → `Model Training` → `Evaluation` → `Business Insights` → `Dashboard`
     """)
 
 
@@ -488,10 +488,14 @@ promo launch using 7-day forecast as signal.
 with tab5:
     st.title("Forecast Simulator")
 
-    with st.spinner("Loading LSTM model..."):
+    with st.spinner("Loading model..."):
         model, feature_scaler, target_scaler = load_model_and_scalers()
-    st.write("The LSTM model was trained on data from all Rossmann stores together. In the dashboard, the selected store’s historical sales are passed into the trained model to generate store-level forecasts")
-    st.markdown("Select a store and see its sales history with LSTM forecast.")
+    st.write(
+    "The forecasting model was trained using historical data from all Rossmann stores. "
+    "In the dashboard, the selected store's historical sales and engineered features "
+    "are used to generate store-level sales forecasts."
+    )
+    st.markdown("Select a store and explore its historical sales alongside the model forecasts.")
     st.markdown("---")
 
     # User inputs
@@ -601,7 +605,7 @@ with tab5:
         for d in promo_dates:
             ax.axvline(d, alpha=0.12, color="#03fc13", linewidth=1.5)
 
-        ax.set_title(f"Store {store_id} — Sales & LSTM Forecast",
+        ax.set_title(f"Store {store_id} — Sales & Model Forecast",
                      fontweight="bold", fontsize=13)
         ax.set_xlabel("Date")
         ax.set_ylabel("Sales (units)")
