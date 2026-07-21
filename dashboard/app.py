@@ -597,7 +597,7 @@ with tab5:
                 label="Actual Sales", color="#2563eb", linewidth=1.8)
 
         ax.plot(store_data["Date"].values, forecast.values,
-                label=f"XGBoost Forecast {'(Promo ON)' if promo_on=='Yes' else ''}",
+                label=f"LSTM Forecast {'(Promo ON)' if promo_on=='Yes' else ''}",
                 color="#ff4d00", linewidth=1.8, linestyle="--", alpha=0.85)
 
         # Mark promotion days (axvspan with same start/end is zero-width; use axvline)
